@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Color definitions
-COLOR_PATH="\033[1;97m"    # bold white
-COLOR_SUCCESS="\033[0;32m" # green
-COLOR_VERBOSE="\033[2m"    # dim gray
+COLOR_PATH="\033[1;97m"     # bold white
+COLOR_SUCCESS="\033[0;32m"  # green
+COLOR_VERBOSE="\033[2m"     # dim gray
+COLOR_ERROR="\033[0;31m"    # red
 COLOR_RESET="\033[0m"
 
 # Conditional verbose logger
@@ -13,24 +14,33 @@ vlog() {
   fi
 }
 
+# Check exit status of the last command and exit if failed
+check_step() {
+  if [ $1 -ne 0 ]; then
+    fail
+  fi
+}
+
+fail() {
+  echo -e "${COLOR_ERROR}failed!${COLOR_RESET}"
+  exit 1
+}
+
 merge() {
   local source_repo_path=$1
   local target_repo_path=$2
   local target_subdir=$3
   local verbose=$4
 
-  # Validate arguments
   if [ ! -d "$source_repo_path/.git" ]; then
     echo "Error: $source_repo_path does not exist or is not a Git repository"
     return 1
   fi
-
   if [ ! -d "$target_repo_path/.git" ]; then
     echo "Error: $target_repo_path does not exist or is not a Git repository"
     return 1
   fi
 
-  # Since the target sub directory is optional, we get it from the repository otherwise as the default
   if [ -z "$target_subdir" ]; then
     target_subdir=$(basename "$source_repo_path")
   fi
@@ -40,41 +50,43 @@ merge() {
   local echo_flag="-e"
 
   $verbose || echo_flag="-en"
-  echo $echo_flag "Merging ${COLOR_PATH}${source_display}${COLOR_RESET} into ${COLOR_PATH}${target_display}/${target_subdir}${COLOR_RESET}... "
+  echo $echo_flag "Merging ${COLOR_PATH}${source_display}${COLOR_RESET} into ${COLOR_PATH}${target_display}${COLOR_RESET}... "
 
-  # Detect default branch
-  local default_branch
-  default_branch=$(cd "$source_repo_path" && git remote show origin 2>/dev/null | grep 'HEAD branch' | cut -d':' -f2 | tr -d ' ')
+  local default_branch=$(cd "$source_repo_path" && git remote show origin 2>/dev/null | grep 'HEAD branch' | grep -v '(unknown)' | cut -d':' -f2 | tr -d ' ')
   if [ -z "$default_branch" ]; then
-    echo
-    echo "Error: Could not detect default branch of $source_repo_path"
-    return 1
+    # Fallback to try receiving the default branch by looking at the HEAD file
+    default_branch=$(cd "$source_repo_path" && cat .git/HEAD | cut -d'/' -f3)
+
+    if [ -z "$default_branch" ]; then
+      vlog "Error: Could not detect default branch of $source_repo_path"
+      fail
+    fi
   fi
 
-  # Clone the default branch of the source repo into a temporary directory
-  local temp_dir
-  temp_dir=$(mktemp -d -t migrate-"${target_subdir}"-XXXXXX)
-  vlog "Cloning $source_repo_path into $temp_dir on branch '$default_branch'..."
-  git clone --branch "$default_branch" --single-branch "$source_repo_path" "$temp_dir" >/dev/null 2>&1
+  vlog "Detected default branch: $default_branch"
 
-  # Rewrite the entire history of the cloned repo to move files into the target subdirectory
+  local temp_dir=$(mktemp -d -t migrate-"${target_subdir}"-XXXXXX)
+  vlog "Cloning $source_repo_path into $temp_dir on branch '$default_branch'..."
+  git clone --no-local --branch "$default_branch" --single-branch "$source_repo_path" "$temp_dir" >/dev/null 2>&1
+  check_step $?
+
   vlog "Rewriting history into subdirectory '$target_subdir'..."
   (cd "$temp_dir" && git filter-repo --to-subdirectory-filter "$target_subdir" >/dev/null 2>&1)
+  check_step $?
 
-  # Add the rewritten repo as a temporary remote to the target repo
   local remote_name="temp-remote-$target_subdir"
   vlog "Adding temporary remote..."
   (cd "$target_repo_path" && git remote add "$remote_name" "$temp_dir")
+  check_step $?
 
-  # Fetch the rewritten branch from the temporary remote
   vlog "Fetching branch '$default_branch'..."
   (cd "$target_repo_path" && git fetch "$remote_name" >/dev/null 2>&1)
+  check_step $?
 
-  # Merge the rewritten branch into the target repo with full commit history
   vlog "Merging '$default_branch' into $target_subdir..."
   (cd "$target_repo_path" && git merge "$remote_name/$default_branch" --allow-unrelated-histories -m "Merge $target_subdir from $source_repo_path" >/dev/null 2>&1)
+  check_step $?
 
-  # Cleanup temporary remote and directory
   vlog "Cleaning up..."
   (cd "$target_repo_path" && git remote remove "$remote_name")
   rm -rf "$temp_dir"
@@ -105,31 +117,31 @@ main() {
 
   while [[ $# -gt 0 ]]; do
     case $1 in
-    -s | --source)
-      source_repo_path="$2"
-      shift 2
-      ;;
-    -t | --target)
-      target_repo_path="$2"
-      shift 2
-      ;;
-    -d | --dir)
-      target_subdir="$2"
-      shift 2
-      ;;
-    -v | --verbose)
-      verbose=true
-      shift
-      ;;
-    -h | --help)
-      print_help
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $1"
-      echo "Use --help to show usage."
-      exit 1
-      ;;
+      -s | --source)
+        source_repo_path="$2"
+        shift 2
+        ;;
+      -t | --target)
+        target_repo_path="$2"
+        shift 2
+        ;;
+      -d | --dir)
+        target_subdir="$2"
+        shift 2
+        ;;
+      -v | --verbose)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        print_help
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1"
+        echo "Use --help to show usage."
+        exit 1
+        ;;
     esac
   done
 
@@ -138,7 +150,6 @@ main() {
     return 1
   fi
 
-  # Ensure git-filter-repo is installed
   if ! command -v git-filter-repo >/dev/null 2>&1; then
     echo "Error: 'git filter-repo' is not installed or not in your PATH."
     echo
