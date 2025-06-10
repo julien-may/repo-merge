@@ -7,11 +7,11 @@ This is useful when consolidating multiple Git projects into a single repository
 
 ## Why?
 
-Whenever I leave a company or wrap up a long-term collaboration, I want to keep a clean record of the projects I contributed to. Not to publish them (most of the work is internal and confidential), but simply to have them archived for myself. For learning, future reference, or just to remember what I worked on.
+Over time, I've accumulated many Git repositories across different projects and contexts. Some are personal experiments, others are contributions to various initiatives, and some are just old projects I want to keep around for reference.
 
-At most companies, I end up working across dozens of different projects, each with its own Git repository. And when it's time to move on, I often copy those repos into a folder. Sometimes that's on a hard drive, sometimes in a cloud folder. Then I forget about them. They are not organized, not searchable, and over time I even forget what I contributed to.
+The problem is that these repositories end up scattered across different locations - some on my local machine, some in cloud folders, some on different Git hosting services. They're not organized, not searchable, and over time I even forget what projects I worked on.
 
-What I really want is to pull all those repositories into a single Git repo. One folder per project, with all the commit history preserved. That way I can name the repository after the company, keep it private, and still have a tidy, complete archive of everything I worked on during that time.
+What I really want is to pull all those repositories into a single, well-organized Git repo. One folder per project, with all the commit history preserved. That way I can keep everything tidy in a single private repository that's easy to browse, search, and reference.
 
 Thanks to services like GitHub, it's easy to store and secure private repositories. With this script, I can now consolidate everything cleanly and push it to a single private repo. For me, this is much better than having a scattered pile of backups floating around.
 
