@@ -52,10 +52,10 @@ merge() {
   $verbose || echo_flag="-en"
   echo $echo_flag "Merging ${COLOR_PATH}${source_display}${COLOR_RESET} into ${COLOR_PATH}${target_display}${COLOR_RESET}... "
 
-  local default_branch=$(cd "$source_repo_path" && git remote show origin 2>/dev/null | grep 'HEAD branch' | grep -v '(unknown)' | cut -d':' -f2 | tr -d ' ')
+  local default_branch=$(cd "$source_repo_path" && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
   if [ -z "$default_branch" ]; then
-    # Fallback to try receiving the default branch by looking at the HEAD file
-    default_branch=$(cd "$source_repo_path" && cat .git/HEAD | cut -d'/' -f3)
+    # Fallback to the checked-out branch without contacting the remote.
+    default_branch=$(cd "$source_repo_path" && git symbolic-ref --quiet --short HEAD 2>/dev/null)
 
     if [ -z "$default_branch" ]; then
       vlog "Error: Could not detect default branch of $source_repo_path"
